@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <codecvt>
 #include <vector>
+#include <memory>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -123,6 +124,7 @@ namespace alt
 			template<class T> Log& operator<<(const T& val) const { return Begin().Put<T>(val); }
 		};
 
+#if __cpp_constexpr >= 201603L
 		static constexpr struct Log_Raw : public Log_Base {
 			Log& Begin() const override { return Instance(); }
 		} Raw{};
@@ -152,6 +154,51 @@ namespace alt
 			template<class... Args> const Log_Debug& operator()(const Args&... args) const { return *this; }
 		} Debug{};
 #endif // NDEBUG
+
+#define ALT_LOG_IMPL
+
+#else
+		static struct Log_Raw : public Log_Base {
+			Log& Begin() const override { return Instance(); }
+		} Raw;
+
+		static struct Log_Info : public Log_Base {
+			Log& Begin() const override { return Instance().Put(White, Time, " "); }
+		} Info;
+
+		static struct Log_Warning : public Log_Base {
+			Log& Begin() const override { return Instance().Put(LYellow, Time, "[Warning] "); }
+		} Warning;
+
+		static struct Log_Error : public Log_Base {
+			Log& Begin() const override { return Instance().Put(Red, Time, "[Error] "); }
+		} Error;
+
+#ifndef NDEBUG
+		static struct Log_Debug : public Log_Base {
+		private:
+			Log& Begin() const override { return Instance().Put(Yellow, Time, "[Debug] "); }
+		} Debug;
+#else
+		static struct Log_Debug {
+		private:
+			const Log_Debug& Begin() const { return *this; }
+		
+		public:
+			template<class T> const Log_Debug& operator<<(T) const { return *this; }
+			const Log_Debug& operator<<(StdStreamManip) const { return *this; }
+			template<class... Args> const Log_Debug& operator()(const Args&... args) const { return *this; }
+		} Debug;
+#endif // NDEBUG
+
+#define ALT_LOG_IMPL \
+	::alt::Log::Log_Raw alt::Log::Raw; \
+	::alt::Log::Log_Info alt::Log::Info; \
+	::alt::Log::Log_Warning alt::Log::Warning; \
+	::alt::Log::Log_Error alt::Log::Error; \
+	::alt::Log::Log_Debug alt::Log::Debug;
+
+#endif // __cpp_constexpr
 
 		static Log& Instance() noexcept
 		{
